@@ -86,6 +86,51 @@ A running log of choices: what we picked, why, and the trade-off.
   if some future code path forgets to set it.
 - **Trade-off:** Cascades can delete a lot at once; acceptable given the model.
 
+## CP2 Core APIs
+
+### API keys: random token, SHA-256 hash stored, shown once
+- **What:** `POST /applications` returns a random `whsk_<64 hex>` key once; we
+  store only its SHA-256 hash. Auth hashes the presented key and looks it up.
+- **Why:** API keys are high-entropy random tokens, so a fast hash is safe
+  (nothing to brute-force) and gives an O(1) exact lookup. Slow password hashes
+  (bcrypt/argon2) exist to defend low-entropy human passwords — not needed here.
+- **Trade-off:** If the DB leaked, raw keys aren't recoverable (good), but we
+  also can't show a key again — the client must store it on creation.
+
+### App registration is unauthenticated; everything else needs the key
+- **What:** `POST /applications` is open (bootstrap); `/endpoints` and `/events`
+  require `Authorization: Bearer <key>`.
+- **Why:** Something has to mint the first credential. Keeps CP2 simple.
+- **Trade-off:** Open registration would need rate-limiting/an admin key in a
+  real deployment. Acceptable for this project's scope.
+
+### Publish = insert event, fan out, create deliveries, enqueue
+- **What:** On publish we insert the event, select active endpoints subscribed to
+  the type (`event_types @> ARRAY[type]`), `INSERT ... ON CONFLICT DO NOTHING`
+  one delivery per endpoint, then enqueue a BullMQ job per new delivery.
+- **Why:** The unique (event_id, endpoint_id) constraint makes delivery creation
+  naturally idempotent; the job only carries the delivery id (Postgres is the
+  source of truth, so the worker reloads fresh rows in CP3).
+- **Trade-off / known gap:** The row is committed before the enqueue, so a crash
+  between them orphans a delivery (pending, no job). Left as a marked `CP4 GAP`
+  in code; CP4 adds an outbox or reconciling sweeper.
+
+### Idempotent publish via a UNIQUE idempotency_key
+- **What:** A repeated `idempotency_key` returns the existing event id with
+  `idempotent_replay: true` instead of creating a new event. Concurrent
+  same-key publishes are resolved by catching the unique-violation (23505).
+- **Why:** Lets clients retry a publish safely. Full semantics/tests are CP4.
+- **Trade-off:** Minimal CP2 version; no per-application scoping of the key yet
+  (the column is globally unique).
+
+### BullMQ job id = delivery id
+- **What:** Each job uses `jobId = deliveryId`.
+- **Why:** Queue-level dedupe on top of the row constraint — re-enqueuing the
+  same delivery collapses to one job.
+- **Trade-off:** With `removeOnComplete`, a later re-publish could create a new
+  job for a completed delivery; the worker (CP3) guards against re-delivering an
+  already-succeeded delivery by checking status.
+
 ### Logging: pino with a redaction list from day one
 - **What:** One shared pino logger; redaction paths for auth headers, secrets,
   and API keys are configured before any such data exists.

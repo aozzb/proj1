@@ -33,3 +33,35 @@
   relying on application code to avoid duplicates? (2) Why is a *partial* index
   on next_attempt_at better than a plain one here? (3) Why validate env with zod
   at startup instead of reading process.env where needed?
+
+## CHECKPOINT 2 — Core APIs
+
+- **Built:** The public HTTP API. `POST /applications` (open bootstrap; returns a
+  random API key once, stores only its SHA-256 hash), `POST /endpoints` and
+  `POST /events` (both behind Bearer-key auth), plus `GET /applications/me`.
+  zod body validation via a `validateBody` middleware; `apiKeyAuth` middleware;
+  an `asyncHandler` wrapper + centralized error handler. The publish flow inserts
+  the event, fans out to subscribed active endpoints, creates deliveries with
+  `ON CONFLICT DO NOTHING`, and enqueues a BullMQ job (producer only) per new
+  delivery. Idempotent publish: a repeated idempotency_key returns the existing
+  event.
+- **Files:** src/lib/crypto.ts, src/lib/queue.ts, src/lib/async-handler.ts,
+  src/middleware/auth.ts, src/middleware/validate.ts, src/schemas.ts,
+  src/routes/{applications,endpoints,events}.ts; wired in src/app.ts; added
+  bullmq dep.
+- **Problem encountered:** The Postgres volume had been reset during earlier
+  verification, so the first live run hit "relation applications does not exist";
+  re-running `docker compose run --rm migrate` fixed it. eslint flagged the
+  error handler's unused `next`; added an `argsIgnorePattern: '^_'` rule.
+- **Verified:** registered an app; good key -> 200, bad key -> 401; created an
+  endpoint (secret returned once); bad event body -> 400; publish -> 202 with 1
+  delivery; same idempotency_key twice -> same event_id + idempotent_replay;
+  event to an unsubscribed type -> 0 deliveries. In Postgres: 3 events, 2 pending
+  deliveries, api_key_hash is a 64-char hash (not the raw key). In Redis: 2
+  BullMQ jobs waiting (job id = delivery id). tsc + eslint clean.
+- **Known gap (deferred to CP4):** delivery row committed before enqueue -> a
+  crash between them orphans a delivery. Marked `CP4 GAP` in src/routes/events.ts.
+- **Interview questions:** (1) Why SHA-256 for API keys but bcrypt/argon2 for
+  user passwords? (2) Walk the "publish" path and name every point a duplicate
+  delivery is prevented. (3) Where exactly is the DB-write/enqueue gap and what
+  are two ways to close it?
