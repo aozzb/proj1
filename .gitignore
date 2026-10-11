@@ -1,2 +1,13 @@
-#.env
+# secrets / local env
 .env
+
+# local project instructions (keep private)
+CLAUDE.md
+
+# dependencies and build output
+node_modules
+dist
+
+# logs
+*.log
+npm-debug.log*

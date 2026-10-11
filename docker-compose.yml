@@ -1,5 +1,47 @@
 
 services:
+  api:
+    build:
+      context: .
+      target: dev
+    container_name: webhook-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Hot reload: mount source, but keep the image's node_modules.
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+
+  # One-off runner: `docker compose run --rm migrate`
+  migrate:
+    build:
+      context: .
+      target: dev
+    environment:
+      DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/app/migrations
+    command: ["npm", "run", "migrate", "up"]
+    profiles: ["tools"]
+
   postgres:
     image: postgres:17
     container_name: webhook-postgres
