@@ -13,6 +13,19 @@ const envSchema = z.object({
     .default('info'),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
+
+  // --- CP3 delivery/worker config (defaults so the API process is unaffected) ---
+  // Hard timeout for each outbound POST (engineering rule: 5-10s).
+  DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  // Total attempts per delivery before it is marked dead.
+  MAX_ATTEMPTS: z.coerce.number().int().positive().default(6),
+  // Exponential backoff: delay = min(cap, base * 2^(attemptsMade-1)), then full jitter.
+  BACKOFF_BASE_MS: z.coerce.number().int().positive().default(1000),
+  BACKOFF_CAP_MS: z.coerce.number().int().positive().default(300000),
+  // How many deliveries a single worker processes concurrently.
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(10),
+  // Replay-protection window for signature verification (receiver side).
+  SIGNATURE_TOLERANCE_SEC: z.coerce.number().int().positive().default(300),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -27,6 +27,52 @@ services:
       - ./tsconfig.json:/app/tsconfig.json
       - /app/node_modules
 
+  worker:
+    build:
+      context: .
+      target: dev
+    container_name: webhook-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    command: ["npm", "run", "worker"]
+
+  chaos-receiver:
+    build:
+      context: .
+      target: dev
+    container_name: webhook-chaos
+    restart: unless-stopped
+    environment:
+      CHAOS_PORT: 4000
+      CHAOS_FAIL_RATE: ${CHAOS_FAIL_RATE:-0.4}
+      CHAOS_HANG_RATE: ${CHAOS_HANG_RATE:-0.2}
+      CHAOS_HANG_MS: ${CHAOS_HANG_MS:-20000}
+      # Test overrides (empty/0 by default = random chaos). Recreate with e.g.
+      #   CHAOS_FORCE_STATUS=200 CHAOS_SECRET=<secret> docker compose up -d chaos-receiver
+      CHAOS_FORCE_STATUS: ${CHAOS_FORCE_STATUS:-}
+      CHAOS_SUCCEED_AFTER: ${CHAOS_SUCCEED_AFTER:-0}
+      CHAOS_SECRET: ${CHAOS_SECRET:-}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./src:/app/src
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    command: ["npm", "run", "chaos"]
+
   # One-off runner: `docker compose run --rm migrate`
   migrate:
     build:

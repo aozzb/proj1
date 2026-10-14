@@ -65,3 +65,37 @@
   user passwords? (2) Walk the "publish" path and name every point a duplicate
   delivery is prevented. (3) Where exactly is the DB-write/enqueue gap and what
   are two ways to close it?
+## CHECKPOINT 3 — Worker and delivery
+
+- **Built:** The delivery pipeline. A BullMQ worker process consumes the
+  `deliveries` queue and runs a processor that: loads the delivery/event/endpoint
+  fresh from Postgres, skips already-terminal deliveries (at-least-once guard),
+  HMAC-SHA256 signs `timestamp.body`, POSTs with a hard 8s timeout, records every
+  attempt in delivery_attempts, and classifies the result — 2xx -> succeeded,
+  permanent 4xx -> failed (no retry), 5xx/429/408/network/timeout -> retry.
+  Retries are BullMQ-native (6 attempts, exponential backoff with full jitter,
+  cap 5m); exhausted deliveries become `dead`. Graceful SIGTERM/SIGINT shutdown
+  drains in-flight jobs. A standalone chaos receiver (random 200/500/hang, HMAC
+  verify, deterministic test knobs) plus `worker` and `chaos-receiver` compose
+  services.
+- **Files:** src/worker/{index,processor,backoff,classify,repository}.ts,
+  src/lib/signing.ts, src/chaos-receiver/index.ts; edited src/config/env.ts
+  (delivery config), src/lib/queue.ts (attempts+backoff), src/lib/db.ts +
+  src/lib/redis.ts (error listeners), docker-compose.yml (worker + chaos),
+  package.json (worker/chaos scripts).
+- **Problem encountered:** The worker crashed with "terminating connection due to
+  administrator command" when Postgres cycled — the pg Pool had no 'error'
+  listener, so an idle-connection error crashed the process. Added pool and redis
+  error handlers (also protects the API). This is a real resilience fix, not a
+  workaround.
+- **Verified (all passed):** (1) immediate success + signature `valid` -> status
+  succeeded, 1 attempt; (2) fail-twice-then-succeed -> attempts 500,500,200,
+  attempts_count=3, backoff visible in logs; (3) permanent 400 -> failed, exactly
+  1 attempt, no retry; (4) hanging receiver -> attempt times out at ~8003ms,
+  status_code NULL, TimeoutError, delivery stays pending to retry; (5) SIGTERM
+  mid-delivery -> worker drained the in-flight job and exited 0 (not SIGKILL).
+  tsc + eslint clean. CP1/CP2 unaffected (health + publish still work).
+- **Interview questions:** (1) Why must the processor RETURN (not throw) on a
+  400 but THROW on a 500? (2) Why full jitter rather than fixed exponential
+  backoff? (3) The worker POSTs, gets 200, then crashes before recording success
+  — what happens on retry and what makes that safe?

@@ -138,3 +138,62 @@ A running log of choices: what we picked, why, and the trade-off.
   makes "don't leak" the default rather than something to remember later.
 - **Trade-off:** Must keep the redaction path list in sync with new secret-ish
   fields.
+
+## CP3 Worker and delivery
+
+### Retry engine: BullMQ-native attempts + custom jitter backoff
+- **What:** Each delivery job carries `attempts = MAX_ATTEMPTS` and
+  `backoff: { type: 'custom' }`; the Worker's `backoffStrategy` returns the
+  delay. The processor THROWS only on retryable failures and RETURNS on success
+  and on permanent 4xx.
+- **Why:** Reuses BullMQ's battle-tested scheduling/locking instead of us
+  re-implementing a scheduler. Postgres still holds the truth (status,
+  attempts_count, next_attempt_at).
+- **Trade-off:** We must be disciplined about the throw/return contract — a stray
+  throw on a 4xx would waste all attempts; a swallowed error on a 5xx would skip
+  retries. The rule lives in one place (the processor).
+
+### Retry schedule (documented)
+- **What:** 6 attempts; exponential `min(cap, base * 2^(attemptsMade-1))` with
+  base 1s, cap 5m; FULL jitter (`random() * exp`).
+- **Un-jittered steps:** ~1s, 2s, 4s, 8s, 16s (then capped at 5m). With 6
+  attempts a delivery reaches `dead` within a few minutes.
+- **Why full jitter:** when a downed receiver recovers, thousands of pending
+  deliveries would otherwise retry at the same instant (thundering herd). Full
+  jitter spreads them uniformly across each backoff window.
+
+### Error classification: retry 5xx / 429 / 408 / network / timeout only
+- **What:** `isRetryableStatus` retries 5xx and the two transient 4xx (429, 408);
+  all other 4xx are permanent. Network errors and timeouts (caught) are always
+  retryable.
+- **Why:** Engineering rule — a permanent 4xx (bad payload, unknown route) will
+  never succeed, so retrying wastes attempts and hammers the receiver.
+
+### Hard per-request timeout via AbortSignal.timeout
+- **What:** Each POST uses `AbortSignal.timeout(DELIVERY_TIMEOUT_MS)` (default 8s).
+- **Why:** Engineering rule — a hanging receiver must never block a worker slot.
+  A timeout is classified retryable and recorded with a null status code.
+
+### HMAC-SHA256 over `timestamp.body`, hex, `sha256=` prefix
+- **What:** Sign `${timestamp}.${rawBody}`; send `X-Webhook-Signature`,
+  `X-Webhook-Timestamp`, `X-Webhook-Id`. Verify with constant-time compare and
+  reject timestamps outside a tolerance window (replay protection).
+- **Why:** Signing the timestamp (not just the body) enables replay rejection and
+  stops the timestamp being altered. Constant-time compare avoids leaking match
+  progress via timing.
+- **Trade-off:** Receiver and sender clocks must be within tolerance (default
+  300s).
+
+### Connection resilience: pool/redis error listeners
+- **What:** Added `pool.on('error')` and `redis.on('error')` handlers.
+- **Why:** A dropped idle Postgres connection emits an unhandled 'error' event
+  that crashes the process (hit this live when Postgres cycled). ioredis
+  auto-reconnects but also needs a handler. Both now log and recover.
+- **Trade-off:** None; this is strictly more robust and applies to the API too.
+
+### Chaos receiver
+- **What:** A standalone Express receiver that randomly 200s / 500s / hangs, and
+  verifies the HMAC when given a secret. Deterministic test knobs:
+  `CHAOS_FORCE_STATUS`, `CHAOS_SUCCEED_AFTER`, `CHAOS_SECRET`.
+- **Why:** Exercises real failure modes (engineering rule: don't mock away
+  failures). Deliberately has no app-config dependency.
