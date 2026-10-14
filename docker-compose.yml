@@ -12,6 +12,10 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
       REDIS_URL: redis://redis:6379
+      # DEV ONLY: allow the in-cluster chaos receiver (a private IP). Prod leaves
+      # this false so SSRF protection blocks private addresses. Overridable for
+      # testing: SSRF_ALLOW_PRIVATE=false docker compose up -d api
+      SSRF_ALLOW_PRIVATE: ${SSRF_ALLOW_PRIVATE:-true}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -38,6 +42,12 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
       REDIS_URL: redis://redis:6379
+      SSRF_ALLOW_PRIVATE: ${SSRF_ALLOW_PRIVATE:-true}
+      # Throttle/breaker tunables (overridable for testing).
+      ENDPOINT_RATE_LIMIT_PER_SEC: ${ENDPOINT_RATE_LIMIT_PER_SEC:-100}
+      ENDPOINT_MAX_CONCURRENCY: ${ENDPOINT_MAX_CONCURRENCY:-20}
+      CB_FAILURE_THRESHOLD: ${CB_FAILURE_THRESHOLD:-5}
+      CB_OPEN_MS: ${CB_OPEN_MS:-30000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +58,28 @@ services:
       - ./tsconfig.json:/app/tsconfig.json
       - /app/node_modules
     command: ["npm", "run", "worker"]
+
+  scheduler:
+    build:
+      context: .
+      target: dev
+    container_name: webhook-scheduler
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    command: ["npm", "run", "scheduler"]
 
   chaos-receiver:
     build:

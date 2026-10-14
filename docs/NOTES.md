@@ -99,3 +99,36 @@
   400 but THROW on a 500? (2) Why full jitter rather than fixed exponential
   backoff? (3) The worker POSTs, gets 200, then crashes before recording success
   — what happens on retry and what makes that safe?
+
+## CHECKPOINT 4 — Reliability
+
+- **Built:** DLQ (deliveries.status='dead') with `GET /deliveries?status=dead`
+  and `POST /deliveries/:id/replay`; idempotency scoped to
+  UNIQUE(application_id, idempotency_key); SSRF protection (block private/
+  loopback/link-local, at creation + per-delivery) with a dev-only
+  SSRF_ALLOW_PRIVATE bypass; per-endpoint rate limit + concurrency cap in Redis
+  (throttle => reschedule without consuming an attempt); a per-endpoint circuit
+  breaker (closed/open/half-open) in Redis; and a dedicated scheduler service
+  running a reconciling sweeper that closes the DB-write/enqueue gap.
+- **Files:** src/lib/ssrf.ts, src/routes/deliveries.ts,
+  src/worker/{limiter,circuit-breaker}.ts, src/scheduler/{index,sweeper}.ts;
+  migrations for idempotency scoping and endpoint throttle columns; edits to
+  env.ts, events.ts, endpoints.ts, schemas.ts, worker/processor.ts,
+  worker/repository.ts, app.ts, docker-compose.yml, package.json.
+- **Problems encountered:** (1) tsx-in-container hot reload didn't always pick up
+  edits — restart the service before testing. (2) First concurrency test passed
+  falsely because createEndpointSchema stripped rate_limit_per_sec/max_concurrency
+  and the INSERT never stored them; fixed schema + insert so per-endpoint
+  throttles persist.
+- **Verified (all passed):** SSRF blocks localhost/metadata/private/non-http and
+  allows public URLs; chaos still works in dev. 100x same key -> 1 event; same
+  key across two apps -> 2 events. Always-500 endpoint -> dead/6 (DLQ) -> listed
+  -> replay -> succeeded/1. Orphan delivery (inserted with no job) reconciled by
+  sweeper -> succeeded. Breaker: closed->open (3 failures)->half-open->closed on
+  a fresh successful delivery. Per-endpoint rate=2/sec + concurrency=1 -> all 8
+  delivered (spread, none lost). tsc/eslint/build clean. CP1-CP3 unaffected.
+- **Interview questions:** (1) Why does a throttled delivery reschedule WITHOUT
+  consuming a retry attempt, but an open-circuit skip DOES consume one? (2) Why
+  check SSRF again in the worker when we already checked at endpoint creation?
+  (3) Why is the reconciling sweeper safe to run every 10s across many pending
+  deliveries, and how does it also make Redis recoverable from Postgres?

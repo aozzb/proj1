@@ -34,11 +34,13 @@ eventsRouter.post(
       idempotency_key?: string;
     };
 
-    // 1. Idempotency fast path: already seen this key -> return the same event.
+    // 1. Idempotency fast path: already seen this key (for this app) -> return
+    // the same event. Scoped per application so keys don't collide across tenants.
     if (idempotency_key) {
-      const existing = await pool.query('SELECT id FROM events WHERE idempotency_key = $1', [
-        idempotency_key,
-      ]);
+      const existing = await pool.query(
+        'SELECT id FROM events WHERE application_id = $1 AND idempotency_key = $2',
+        [appId, idempotency_key]
+      );
       if (existing.rows.length > 0) {
         res.status(200).json({ event_id: existing.rows[0].id, idempotent_replay: true });
         return;
@@ -59,9 +61,10 @@ eventsRouter.post(
       eventId = ins.rows[0].id;
     } catch (err) {
       if (idempotency_key && isUniqueViolation(err)) {
-        const existing = await pool.query('SELECT id FROM events WHERE idempotency_key = $1', [
-          idempotency_key,
-        ]);
+        const existing = await pool.query(
+          'SELECT id FROM events WHERE application_id = $1 AND idempotency_key = $2',
+          [appId, idempotency_key]
+        );
         res.status(200).json({ event_id: existing.rows[0].id, idempotent_replay: true });
         return;
       }
@@ -87,10 +90,11 @@ eventsRouter.post(
       );
 
       if (del.rows.length > 0) {
-        // CP4 GAP: the delivery row is committed above, but if the process dies
-        // here (before/while enqueuing) the delivery is left 'pending' with no
-        // job — a lost webhook. CP4 closes this with an outbox or a reconciling
-        // sweeper that re-enqueues pending deliveries that have no live job.
+        // Dual-write gap: the delivery row is committed above, but if the process
+        // dies before/while enqueuing, the delivery is left 'pending' with no job.
+        // This enqueue is best-effort; the reconciling sweeper (src/scheduler)
+        // re-enqueues any due 'pending' delivery that lacks a live job, so a lost
+        // enqueue self-heals within one sweep interval.
         await enqueueDelivery(del.rows[0].id);
         created++;
       }

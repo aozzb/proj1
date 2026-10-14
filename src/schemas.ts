@@ -11,6 +11,9 @@ export const createEndpointSchema = z.object({
     message: 'url must be http(s)',
   }),
   event_types: z.array(z.string().min(1)).min(1),
+  // Optional per-endpoint throttles; omit to use the service defaults.
+  rate_limit_per_sec: z.number().int().positive().optional(),
+  max_concurrency: z.number().int().positive().optional(),
 });
 
 export const publishEventSchema = z.object({

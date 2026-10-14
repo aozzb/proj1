@@ -7,10 +7,12 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "worker": "tsx watch src/worker/index.ts",
+    "scheduler": "tsx watch src/scheduler/index.ts",
     "chaos": "tsx watch src/chaos-receiver/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "start:worker": "node dist/worker/index.js",
+    "start:scheduler": "node dist/scheduler/index.js",
     "migrate": "node-pg-migrate -j js -m migrations",
     "migrate:create": "node-pg-migrate create -j js -m migrations",
     "lint": "eslint .",

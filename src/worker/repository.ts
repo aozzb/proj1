@@ -11,6 +11,8 @@ export interface DeliveryContext {
   endpointId: string;
   url: string;
   secret: string;
+  rateLimitPerSec: number | null;
+  maxConcurrency: number | null;
 }
 
 /**
@@ -27,7 +29,9 @@ export async function loadDeliveryContext(deliveryId: string): Promise<DeliveryC
             e.payload       AS "payload",
             ep.id           AS "endpointId",
             ep.url          AS "url",
-            ep.secret       AS "secret"
+            ep.secret       AS "secret",
+            ep.rate_limit_per_sec AS "rateLimitPerSec",
+            ep.max_concurrency    AS "maxConcurrency"
      FROM deliveries d
      JOIN events e     ON e.id = d.event_id
      JOIN endpoints ep ON ep.id = d.endpoint_id

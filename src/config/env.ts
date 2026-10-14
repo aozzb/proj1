@@ -26,6 +26,25 @@ const envSchema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(10),
   // Replay-protection window for signature verification (receiver side).
   SIGNATURE_TOLERANCE_SEC: z.coerce.number().int().positive().default(300),
+
+  // --- CP4 reliability config (all defaulted; additive) ---
+  // SSRF: block private/loopback/link-local IPs for endpoint URLs. Set to "true"
+  // ONLY in local/dev so the in-cluster chaos receiver (a private IP) is reachable.
+  // (enum+transform, not z.coerce.boolean, because coercion treats "false" as true.)
+  SSRF_ALLOW_PRIVATE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  // Per-endpoint delivery throttles (permissive defaults so existing flows are unaffected).
+  ENDPOINT_RATE_LIMIT_PER_SEC: z.coerce.number().int().positive().default(100),
+  ENDPOINT_MAX_CONCURRENCY: z.coerce.number().int().positive().default(20),
+  // Circuit breaker (per endpoint).
+  CB_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(5),
+  CB_OPEN_MS: z.coerce.number().int().positive().default(30000),
+  CB_HALF_OPEN_MAX: z.coerce.number().int().positive().default(1),
+  // Reconciling sweeper (scheduler process).
+  SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(10000),
+  SWEEP_BATCH: z.coerce.number().int().positive().default(100),
 });
 
 const parsed = envSchema.safeParse(process.env);

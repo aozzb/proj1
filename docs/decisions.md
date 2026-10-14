@@ -197,3 +197,64 @@ A running log of choices: what we picked, why, and the trade-off.
   `CHAOS_FORCE_STATUS`, `CHAOS_SUCCEED_AFTER`, `CHAOS_SECRET`.
 - **Why:** Exercises real failure modes (engineering rule: don't mock away
   failures). Deliberately has no app-config dependency.
+
+## CP4 Reliability
+
+### DLQ = deliveries.status 'dead' (no separate Redis queue)
+- **What:** The dead-letter queue is just `deliveries` rows with status='dead';
+  BullMQ's retained failed jobs are secondary. `GET /deliveries?status=dead`
+  lists it; `POST /deliveries/:id/replay` re-queues one.
+- **Why:** Postgres is the source of truth; a DB-backed DLQ is durable and
+  queryable, and avoids a second place that can disagree.
+- **Trade-off:** Listing/replay go through SQL, not a queue API — fine at this scale.
+
+### Replay resets to a fresh pending state and removes the stale job
+- **What:** Replay sets status=pending, attempts_count=0, next_attempt_at=now,
+  removes any job with jobId=deliveryId, then enqueues.
+- **Why:** jobId dedupe would otherwise collapse the new enqueue into the old
+  failed job. Attempt history is preserved in delivery_attempts.
+- **Trade-off:** Only dead/failed are replayable (409 otherwise).
+
+### Idempotency scoped to (application_id, idempotency_key)
+- **What:** Replaced the global UNIQUE(idempotency_key) with a composite unique.
+- **Why:** Keys are per-tenant; two apps must be able to reuse the same key.
+  NULLs stay distinct so keyless events are never deduped.
+
+### SSRF: block private/loopback/link-local, at creation AND delivery
+- **What:** `assertUrlAllowed` rejects non-http(s), embedded credentials, and
+  hosts resolving to loopback/private/link-local/CGNAT/multicast ranges. Checked
+  at endpoint creation and again in the worker before each POST (DNS rebinding).
+- **Why:** Engineering rule — customer URLs must not reach internal services or
+  the cloud metadata endpoint (169.254.169.254).
+- **Trade-off / dev:** The in-cluster chaos receiver is a private IP, so
+  SSRF_ALLOW_PRIVATE=true is set in dev compose only; prod leaves it false.
+  Re-resolving per delivery (not IP pinning) is a small residual rebinding window.
+
+### Per-endpoint rate limit + concurrency cap (Redis)
+- **What:** Fixed 1s-window rate limit and an in-flight concurrency counter per
+  endpoint, enforced in the processor before the POST. Over a limit => the job is
+  rescheduled via BullMQ moveToDelayed WITHOUT consuming a retry attempt.
+- **Why:** Protect slow/limited receivers and share worker capacity fairly.
+  Throttling is backpressure, not failure, so it must not burn the retry budget.
+- **Trade-off:** Fixed-window rate limiting allows short bursts at window edges;
+  good enough here. Values are per-endpoint columns (NULL => env default).
+
+### Circuit breaker (per endpoint, Redis), open consumes an attempt
+- **What:** closed -> open (after CB_FAILURE_THRESHOLD consecutive retryable
+  failures) -> half-open (after CB_OPEN_MS, limited trials) -> closed on success.
+  While open, the POST is skipped and the attempt is fast-failed.
+- **Why:** Stop hammering a down endpoint and stop wasting worker slots on
+  timeouts. Permanent 4xx do NOT trip it (client error, not availability).
+- **Design choice:** an open-circuit skip still consumes a retry attempt, so a
+  permanently-down endpoint still marches to the DLQ; the breaker only saves the
+  network call + timeout wait. State is Redis (pragmatic, non-Lua).
+
+### DB-write/enqueue gap: reconciling sweeper (dedicated scheduler)
+- **What:** A single `scheduler` service runs sweepOnce() every SWEEP_INTERVAL_MS:
+  it enqueues due 'pending' deliveries. jobId dedupe makes it idempotent and lets
+  it rebuild the whole queue from Postgres if Redis is wiped.
+- **Why:** Simplest fix that also satisfies "Redis state recoverable from
+  Postgres". Chose it over a transactional outbox (stronger but more moving
+  parts); publish's enqueue stays best-effort with the sweeper as backstop.
+- **Trade-off:** A lost enqueue self-heals within one sweep interval (latency),
+  rather than immediately as an outbox relay would.
