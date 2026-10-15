@@ -42,6 +42,45 @@ deliveriesRouter.get(
 );
 
 /**
+ * GET /deliveries/:id  (auth required)
+ * One delivery plus its full attempt history — "see attempts and status per
+ * delivery". Ownership enforced via the delivery's event.
+ */
+deliveriesRouter.get(
+  '/deliveries/:id',
+  apiKeyAuth,
+  asyncHandler(async (req, res) => {
+    const appId = req.application!.id;
+    const deliveryId = req.params.id;
+
+    const { rows } = await pool.query(
+      `SELECT d.id, d.status, d.attempts_count, d.next_attempt_at, d.last_error,
+              d.event_id, d.endpoint_id, d.created_at, d.updated_at,
+              e.type AS event_type, ep.url AS endpoint_url
+       FROM deliveries d
+       JOIN events e ON e.id = d.event_id
+       JOIN endpoints ep ON ep.id = d.endpoint_id
+       WHERE d.id = $1 AND e.application_id = $2`,
+      [deliveryId, appId]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'delivery not found' });
+      return;
+    }
+
+    const attempts = await pool.query(
+      `SELECT attempt_number, status_code, latency_ms, error, response_snippet, created_at
+       FROM delivery_attempts
+       WHERE delivery_id = $1
+       ORDER BY attempt_number ASC`,
+      [deliveryId]
+    );
+
+    res.json({ ...rows[0], attempts: attempts.rows });
+  })
+);
+
+/**
  * POST /deliveries/:id/replay  (auth required)
  * Re-queues a dead or failed delivery: reset to pending with a fresh attempt
  * budget, remove any stale queue job, and enqueue again. Succeeded/pending

@@ -6,6 +6,7 @@ import { apiKeyAuth } from '../middleware/auth';
 import { publishEventSchema } from '../schemas';
 import { enqueueDelivery } from '../lib/queue';
 import { logger } from '../lib/logger';
+import { eventsPublishedCounter } from '../lib/metrics';
 
 export const eventsRouter = Router();
 
@@ -100,6 +101,7 @@ eventsRouter.post(
       }
     }
 
+    eventsPublishedCounter.inc();
     logger.info({ eventId, type, deliveriesCreated: created }, 'event published');
     res.status(202).json({ event_id: eventId, deliveries_created: created });
   })

@@ -6,6 +6,8 @@ import { applicationsRouter } from './routes/applications';
 import { endpointsRouter } from './routes/endpoints';
 import { eventsRouter } from './routes/events';
 import { deliveriesRouter } from './routes/deliveries';
+import { metricsRouter } from './routes/metrics';
+import { dashboardRouter } from './routes/dashboard';
 
 /**
  * Builds the Express app. Kept separate from server startup so tests can import
@@ -23,6 +25,8 @@ export function createApp() {
   app.use(endpointsRouter);
   app.use(eventsRouter);
   app.use(deliveriesRouter);
+  app.use(metricsRouter);
+  app.use(dashboardRouter);
 
   // Centralized error handler: log the real error, return a generic message.
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {

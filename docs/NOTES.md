@@ -132,3 +132,28 @@
   check SSRF again in the worker when we already checked at endpoint creation?
   (3) Why is the reconciling sweeper safe to run every 10s across many pending
   deliveries, and how does it also make Redis recoverable from Postgres?
+
+## CHECKPOINT 5 — Observability and UI
+
+- **Built:** `GET /metrics` (prom-client: default process metrics, an in-process
+  `webhook_events_published_total` counter, and Postgres-derived gauges for
+  deliveries-by-status, total events, and delivery-attempts-by-result); a
+  delivery status API (`GET /deliveries/:id` with full attempt history, plus the
+  existing `GET /deliveries?status=` list); and a minimal inline `/dashboard`
+  (list, expand attempts, replay button).
+- **Files:** src/lib/metrics.ts, src/routes/metrics.ts, src/routes/dashboard.ts;
+  added GET /deliveries/:id to src/routes/deliveries.ts; incremented the counter
+  in src/routes/events.ts; wired routers in src/app.ts; added prom-client dep.
+- **Problem encountered:** After adding prom-client the api container crashed
+  with "Cannot find module 'prom-client'" — the anonymous node_modules volume
+  was stale from the old image. Fixed by recreating containers (docker compose
+  down + up --build); the named Postgres volume preserved the data.
+- **Verified (all passed):** /metrics returns real values (deliveries by status,
+  attempts by result, events counter, default process metrics); /dashboard
+  serves HTML (200); GET /deliveries/:id returns status + all 3 attempts for a
+  retried delivery; status filter works; cross-tenant read returns 404.
+  tsc/eslint/build clean; CP1-CP4 unaffected.
+- **Interview questions:** (1) Why derive delivery metrics from Postgres at
+  scrape time instead of incrementing counters in the worker? (2) Why is
+  /deliveries/:id scoped by application, and what would break if it weren't?
+  (3) Why serve the dashboard as an inline string instead of a static file?

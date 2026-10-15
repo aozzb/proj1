@@ -258,3 +258,36 @@ A running log of choices: what we picked, why, and the trade-off.
   parts); publish's enqueue stays best-effort with the sweeper as backstop.
 - **Trade-off:** A lost enqueue self-heals within one sweep interval (latency),
   rather than immediately as an outbox relay would.
+
+## CP5 Observability and UI
+
+### /metrics: DB-derived gauges + one in-process counter
+- **What:** `GET /metrics` (prom-client) exposes default process metrics, a real
+  counter `webhook_events_published_total` incremented in the publish route, and
+  gauges derived from Postgres on each scrape: `webhook_deliveries{status}`,
+  `webhook_events_total`, `webhook_delivery_attempts{result}`.
+- **Why:** Deliveries run in the worker process, which this endpoint does not
+  scrape. Rather than aggregate counters across processes, we read the counts
+  from Postgres (the source of truth) at scrape time — correct across processes
+  and restarts. The one real counter shows the code-incremented pattern too.
+- **Trade-off:** DB-derived values are gauges, not monotonic counters, and each
+  scrape runs a few COUNT queries (cheap at this scale; could be cached later).
+  `/metrics` is unauthenticated by Prometheus convention (sits behind the
+  private network in prod).
+
+### Delivery status API
+- **What:** `GET /deliveries/:id` returns the delivery plus its full attempt
+  history; `GET /deliveries?status=` lists them. Both scoped to the caller's
+  application (other tenants get 404).
+- **Why:** The CP5 goal — "see attempts and status per delivery" — and it backs
+  the dashboard.
+
+### Minimal dashboard served inline
+- **What:** `GET /dashboard` returns a single self-contained HTML page (vanilla
+  JS, no build, no external libs): paste an API key, list deliveries, expand one
+  to see attempts, replay dead/failed ones.
+- **Why:** Kept deliberately minimal (not the project's focus). Served as an
+  inline string so it needs no static-file packaging in the Docker image and
+  works the same in dev and prod. The API key is sent only to this API and
+  cached in the browser's localStorage for convenience.
+- **Trade-off:** Not a real admin UI; no pagination/auth session. Fine for scope.
