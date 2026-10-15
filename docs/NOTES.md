@@ -157,3 +157,33 @@
   scrape time instead of incrementing counters in the worker? (2) Why is
   /deliveries/:id scoped by application, and what would break if it weren't?
   (3) Why serve the dashboard as an inline string instead of a static file?
+
+## CHECKPOINT 6 — Quality
+
+- **Built:** Vitest test suite (32 tests) + an automated chaos script + GitHub
+  Actions CI. Unit tests: signing (sign/verify/tamper/stale), classify, backoff
+  bounds, SSRF ip-classification. Integration tests against real Postgres+Redis:
+  publish/auth/zod/idempotency (per-app) via supertest; delivery via a real
+  in-process BullMQ worker + controllable receiver covering success+signature,
+  retry->success, permanent-4xx (no retry), 5xx->DLQ(dead), hang->timeout, and
+  replay->success. Chaos script (scripts/chaos-test.mjs) drives the live compose
+  stack for retry/DLQ/replay/100x-idempotency/tamper. CI runs lint->tsc->build->
+  vitest with postgres+redis service containers.
+- **Files:** vitest.config.ts; tests/{testEnv,globalSetup,setup}.ts,
+  tests/helpers/{db,wait,receiver,worker}.ts, tests/unit/*.test.ts,
+  tests/integration/*.test.ts; scripts/chaos-test.mjs; .github/workflows/ci.yml;
+  package.json (vitest/supertest devDeps + test scripts). No src/ changes —
+  CP6 is fully additive.
+- **Isolation:** separate webhook_test DB + Redis index /1; globalSetup creates
+  and migrates the test DB; truncate + flushdb between tests; small-clock test
+  env so retry/DLQ cycles run in ~1-2s; files serial; connections closed in
+  afterAll.
+- **Problems encountered:** lint flagged ternary-as-statement in the chaos
+  script; refactored to an assert() helper.
+- **Verified:** `npm test` -> 32/32 passed (6 files). `npm run chaos:test` ->
+  all scenarios passed against the live stack. build ok; lockfile in sync so
+  `npm ci` (CI) will pass; no src modified so CP1-CP5 behavior unchanged.
+- **Interview questions:** (1) Why run tests against real Postgres+Redis instead
+  of mocking them, and what would a mock hide here? (2) How do the delivery
+  tests stay deterministic while running the real BullMQ worker? (3) Why keep the
+  chaos script out of the CI lane that must stay green?

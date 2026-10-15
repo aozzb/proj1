@@ -291,3 +291,44 @@ A running log of choices: what we picked, why, and the trade-off.
   works the same in dev and prod. The API key is sent only to this API and
   cached in the browser's localStorage for convenience.
 - **Trade-off:** Not a real admin UI; no pagination/auth session. Fine for scope.
+
+## CP6 Quality
+
+### Vitest, with real Postgres + Redis (no hidden-failure mocks)
+- **What:** Vitest for unit + integration tests. Integration tests run against the
+  real compose Postgres/Redis, on an isolated test database (webhook_test) and
+  Redis DB index (/1). Only the HTTP receiver is a local controllable server.
+- **Why:** Engineering rule — don't mock in a way that hides real failure modes.
+  Real DB enforces the real constraints (unique idempotency, FK cascades); real
+  Redis exercises the real queue.
+- **Trade-off:** Tests need infra available (compose locally, service containers
+  in CI) — slower than pure mocks, but far more trustworthy.
+
+### Delivery tests run the real BullMQ worker in-process
+- **What:** Integration tests start a genuine Worker (helper mirroring
+  src/worker/index.ts without signal handlers) and assert on resulting DB state,
+  driven by a controllable receiver (ok / 500 / 400 / hang / succeed-after-N).
+- **Why:** Exercises the true end-to-end path through the queue and processor.
+- **Keeping it non-flaky:** test env shrinks the clock (BACKOFF_BASE_MS=50,
+  cap 400, DELIVERY_TIMEOUT_MS=1000, MAX_ATTEMPTS=4) and a high breaker threshold
+  so retry/DLQ cycles finish in ~1-2s; tests poll for state (waitFor) instead of
+  sleeping; files run serially; truncate + flushdb between tests.
+- **Trade-off:** A worker in-process is heavier than calling processDelivery
+  directly, but gives real queue coverage. The chaos script covers real-clock
+  timing separately.
+
+### Chaos script separate from the fast CI lane
+- **What:** scripts/chaos-test.mjs drives the full compose stack + flaky chaos
+  receiver (retry->success, DLQ, replay, 100x idempotency, tamper->401). Not run
+  in CI; invoked manually via `npm run chaos:test`.
+- **Why:** It needs the whole compose and real timing (slow, timing-sensitive).
+  Keeping it out of CI keeps CI fast and non-flaky; the deterministic suite
+  covers the same behaviours quickly.
+
+### CI: GitHub Actions with service containers
+- **What:** .github/workflows/ci.yml runs on push/PR: Node 22, postgres:17 +
+  redis:7 service containers, then lint -> tsc --noEmit -> build -> vitest.
+  TEST_* env vars point tests at the service containers.
+- **Why:** Mirrors the real stack (not mocks) and gives the CP6 done-when (green
+  CI covering retry, DLQ, idempotency, signature). No secrets needed — a
+  throwaway test password only.
