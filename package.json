@@ -19,7 +19,10 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "chaos:test": "node scripts/chaos-test.mjs"
+    "chaos:test": "node scripts/chaos-test.mjs",
+    "bench:publish": "node scripts/load/publish-bench.mjs",
+    "bench:delivery": "node scripts/load/delivery-bench.mjs",
+    "experiments": "node scripts/experiments/run.mjs"
   },
   "dependencies": {
     "bullmq": "^5.34.10",
@@ -33,6 +36,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "autocannon": "^8.0.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.5",
     "@types/pg": "^8.11.10",

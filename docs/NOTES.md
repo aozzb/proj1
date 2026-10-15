@@ -187,3 +187,37 @@
   of mocking them, and what would a mock hide here? (2) How do the delivery
   tests stay deterministic while running the real BullMQ worker? (3) Why keep the
   chaos script out of the CI lane that must stay green?
+
+## CHECKPOINT 7 — Measure and document
+
+- **Built:** autocannon load tests (publish throughput; end-to-end delivery
+  throughput with a worker-concurrency before/after), a six-case failure-
+  experiment runner, measured write-ups (docs/BENCHMARKS.md, docs/EXPERIMENTS.md)
+  with full context + localhost caveats, README inputs (docs/architecture.md with
+  a Mermaid diagram + trade-offs digest), and draft resume bullets
+  (docs/resume-bullets.md) from measured numbers only. Raw output committed under
+  docs/benchmarks and docs/experiments.
+- **Files:** scripts/lib/util.mjs, scripts/load/{publish,delivery}-bench.mjs,
+  scripts/experiments/run.mjs; docs/{BENCHMARKS,EXPERIMENTS,architecture,
+  resume-bullets}.md; docs/benchmarks/* + docs/experiments/* raw output;
+  package.json (autocannon devDep + bench/experiment scripts); docker-compose.yml
+  (WORKER_CONCURRENCY now overridable). One fix to scripts/chaos-test.mjs.
+- **Measured (dev laptop, AMD Ryzen 5 7530U 6c, 15.3GB, Win, localhost,
+  in-container receiver):** publish ~309 req/s, p99 153ms, 0 errors; 300 webhooks
+  end-to-end in ~3s; worker-concurrency 20 slightly slower than 5 (reported
+  honestly). Experiments: worker-kill recovered ~31s (stalled reclaim); transient
+  failures auto-recovered; 500->DLQ ~21s then replay ~0.5s after breaker cooldown;
+  hang timed out ~8s; Redis FLUSHALL recovered ~1.3s via sweeper; 100x->1 event;
+  tamper->401.
+- **Problems encountered:** two experiments and the chaos script's replay step
+  initially failed because a dead endpoint's circuit breaker is OPEN; replaying
+  before the ~30s cooldown fast-fails. Fixed by waiting out the cooldown (real
+  behaviour, now documented). worker-kill needed a realistic ~120s window for
+  BullMQ stalled-job reclaim.
+- **Verified:** lint/tsc/build clean; 32/32 tests pass; chaos script all pass;
+  all 6 experiments pass; no src logic changed (CP1-CP6 intact).
+- **Interview questions:** (1) Why is "receiver down 10 minutes then recovers"
+  really a DLQ+replay story here, not silent auto-healing? (2) Why did more
+  worker concurrency not help, and what's the likely bottleneck? (3) Why must
+  every reported number carry hardware/tool/concurrency/duration and a
+  localhost caveat?

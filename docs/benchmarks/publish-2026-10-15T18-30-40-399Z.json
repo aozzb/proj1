@@ -1,0 +1,30 @@
+{
+  "context": {
+    "timestamp": "2026-10-15T18:30:30.311Z",
+    "cpu": "AMD Ryzen 5 7530U with Radeon Graphics",
+    "logicalCores": 6,
+    "ramGB": 15.3,
+    "os": "win32 10.0.26200",
+    "node": "v22.16.0",
+    "docker": "Docker version 29.8.1, build 4a63305",
+    "receiver": "in-container chaos receiver on localhost (NOT a real network)",
+    "tool": "autocannon@8.0.0",
+    "scenario": "POST /events (publish throughput)",
+    "connections": 20,
+    "durationSec": 10,
+    "workerConcurrencyEnv": "10 (default)"
+  },
+  "requestsPerSec": {
+    "mean": 308.8,
+    "stddev": 34.15
+  },
+  "latencyMs": {
+    "p50": 59,
+    "p97_5": 117,
+    "p99": 153,
+    "max": 221
+  },
+  "total2xx": 3088,
+  "totalNon2xx": 0,
+  "throughputBytesPerSec": 97260.8
+}

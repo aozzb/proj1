@@ -1,0 +1,22 @@
+{
+  "context": {
+    "timestamp": "2026-10-15T18:31:07.113Z",
+    "cpu": "AMD Ryzen 5 7530U with Radeon Graphics",
+    "logicalCores": 6,
+    "ramGB": 15.3,
+    "os": "win32 10.0.26200",
+    "node": "v22.16.0",
+    "docker": "Docker version 29.8.1, build 4a63305",
+    "receiver": "in-container chaos receiver on localhost (NOT a real network)",
+    "scenario": "end-to-end delivery throughput",
+    "messages": 300,
+    "publishConcurrency": 50,
+    "workerConcurrencyEnv": "5",
+    "note": "receiver forced 200, signature verification OFF for raw throughput"
+  },
+  "publishMs": 1356,
+  "publishPerSec": 221,
+  "totalWallMs": 3150,
+  "drainWaitMs": 1794,
+  "deliveriesPerSec": 95
+}

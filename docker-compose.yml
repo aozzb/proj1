@@ -43,6 +43,7 @@ services:
       DATABASE_URL: postgres://webhook_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/webhook_db
       REDIS_URL: redis://redis:6379
       SSRF_ALLOW_PRIVATE: ${SSRF_ALLOW_PRIVATE:-true}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
       # Throttle/breaker tunables (overridable for testing).
       ENDPOINT_RATE_LIMIT_PER_SEC: ${ENDPOINT_RATE_LIMIT_PER_SEC:-100}
       ENDPOINT_MAX_CONCURRENCY: ${ENDPOINT_MAX_CONCURRENCY:-20}

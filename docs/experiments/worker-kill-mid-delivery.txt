@@ -1,0 +1,5 @@
+[2026-10-15T18:40:17.295Z] {"timestamp":"2026-10-15T18:40:17.294Z","cpu":"AMD Ryzen 5 7530U with Radeon Graphics","logicalCores":6,"ramGB":15.3,"os":"win32 10.0.26200","node":"v22.16.0","docker":"Docker version 29.8.1, build 4a63305","receiver":"in-container chaos receiver on localhost (NOT a real network)","experiment":"worker-kill-mid-delivery"}
+[2026-10-15T18:40:21.116Z] published event c19df2a7-f9e6-4527-a9d0-3466c699facd, delivery 56bc2206-8bb6-4676-91c4-1a10819e88ab; receiver is hanging
+[2026-10-15T18:40:23.124Z] killing worker mid-delivery (docker compose kill worker)
+[2026-10-15T18:40:24.548Z] switching receiver to 200 and restarting worker
+[2026-10-15T18:40:57.940Z] delivery recovered and succeeded after 31325ms via stalled-job reclaim (no event lost)

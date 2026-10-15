@@ -1,0 +1,7 @@
+[2026-10-15T18:42:19.767Z] {"timestamp":"2026-10-15T18:42:19.767Z","cpu":"AMD Ryzen 5 7530U with Radeon Graphics","logicalCores":6,"ramGB":15.3,"os":"win32 10.0.26200","node":"v22.16.0","docker":"Docker version 29.8.1, build 4a63305","receiver":"in-container chaos receiver on localhost (NOT a real network)","experiment":"redis-loss-recovery"}
+[2026-10-15T18:42:22.945Z] stopping worker so jobs queue up
+[2026-10-15T18:42:23.881Z] published 20 events; redis bull:deliveries keys now = 26
+[2026-10-15T18:42:23.881Z] simulating Redis data loss: FLUSHALL
+[2026-10-15T18:42:24.398Z] redis keys after FLUSHALL = 0 (Postgres still holds the pending deliveries)
+[2026-10-15T18:42:24.399Z] starting worker; the scheduler sweeper should re-enqueue from Postgres
+[2026-10-15T18:42:26.627Z] all 20 deliveries recovered from Postgres and delivered after 1317ms

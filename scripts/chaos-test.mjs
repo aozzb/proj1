@@ -89,10 +89,13 @@ async function main() {
   // Scenario C: fix receiver, replay the dead delivery -> success.
   console.log('[C] replay a dead delivery -> success');
   recreateChaos({ CHAOS_FORCE_STATUS: '200', CHAOS_SECRET: secret });
-  await sleep(3000);
+  // Sustained 500s tripped the per-endpoint circuit breaker open; wait out its
+  // cooldown (~30s) so the replay's first attempt is a half-open trial that
+  // succeeds, instead of fast-failing while the breaker is still open.
+  await sleep(33000);
   const replay = await api('POST', `/deliveries/${bDid}/replay`, { key });
   assert(replay.status === 202, 'replay accepted', `replay status ${replay.status}`);
-  assert(await pollDelivery(bDid, key, 'succeeded', 30000), 'replayed delivery succeeded', 'replayed delivery did not succeed');
+  assert(await pollDelivery(bDid, key, 'succeeded', 40000), 'replayed delivery succeeded', 'replayed delivery did not succeed');
 
   // Scenario D: 100x same idempotency_key -> exactly one event.
   console.log('[D] 100x one idempotency key -> one event');

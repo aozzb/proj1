@@ -332,3 +332,39 @@ A running log of choices: what we picked, why, and the trade-off.
 - **Why:** Mirrors the real stack (not mocks) and gives the CP6 done-when (green
   CI covering retry, DLQ, idempotency, signature). No secrets needed — a
   throwaway test password only.
+
+## CP7 Measure and document
+
+### autocannon for load; /metrics gauge for drain timing
+- **What:** autocannon (npm, no separate binary) drives POST /events for publish
+  throughput. End-to-end delivery throughput is measured by publishing N events
+  and polling the /metrics succeeded gauge until all N drain.
+- **Why:** autocannon runs cross-platform and the bench can self-set-up in Node;
+  reusing /metrics for drain timing leans on existing observability instead of a
+  side channel.
+- **Trade-off:** autocannon gives less scenario control than k6; the delivery
+  figure is end-to-end (publish + drain), not a pure worker rate.
+
+### Metrics honesty, enforced in the scripts
+- **What:** Every measured number is written with a context header (CPU, cores,
+  RAM, OS, Node, Docker, tool+version, concurrency, duration) and a standing note
+  that the receiver is in-container localhost. Raw output committed under
+  docs/benchmarks and docs/experiments.
+- **Why:** Project rule — never invent/estimate; always state hardware/tool/
+  concurrency/duration and that the receiver is localhost/mocked.
+- **Honest finding:** worker concurrency 20 was slightly SLOWER than 5 at this
+  scale (pg pool cap + per-delivery DB/Redis round-trips); reported as-is, not
+  spun into a scaling claim. Runs are small/single-shot (high variance).
+
+### README stays owner-authored; CP7 provides inputs
+- **What:** docs/architecture.md (Mermaid diagram + trade-offs digest) and
+  docs/resume-bullets.md are inputs for the owner-written README/resume.
+- **Why:** Convention — the owner writes the README; resume bullets must come
+  only from measured numbers, with caveats.
+
+### Circuit-breaker vs. replay (surfaced by the experiments)
+- **What:** A dead delivery's endpoint has an OPEN breaker; replaying immediately
+  fast-fails until the ~30s cooldown. The chaos script and experiment 2b now wait
+  out the cooldown before replaying.
+- **Why:** This is real, correct behaviour; documenting it (rather than disabling
+  the breaker in tests) keeps the experiments representative.

@@ -1,0 +1,6 @@
+[2026-10-15T18:41:03.870Z] {"timestamp":"2026-10-15T18:41:03.870Z","cpu":"AMD Ryzen 5 7530U with Radeon Graphics","logicalCores":6,"ramGB":15.3,"os":"win32 10.0.26200","node":"v22.16.0","docker":"Docker version 29.8.1, build 4a63305","receiver":"in-container chaos receiver on localhost (NOT a real network)","experiment":"receiver-500-exhaust-to-dlq-then-replay","note":"default 6 attempts reach DLQ in a few minutes, NOT 10 min"}
+[2026-10-15T18:41:07.647Z] published be774b76-2848-4166-9af2-6fdc9785a001; receiver permanently 500
+[2026-10-15T18:41:29.196Z] delivery exhausted retries and landed in DLQ after 21549ms
+[2026-10-15T18:41:30.382Z] receiver fixed; waiting out circuit-breaker cooldown (~30s) before replay
+[2026-10-15T18:42:03.389Z] replaying the dead delivery
+[2026-10-15T18:42:03.925Z] replayed delivery succeeded after 516ms

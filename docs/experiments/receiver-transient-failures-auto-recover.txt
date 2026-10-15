@@ -1,0 +1,3 @@
+[2026-10-15T18:40:58.002Z] {"timestamp":"2026-10-15T18:40:58.002Z","cpu":"AMD Ryzen 5 7530U with Radeon Graphics","logicalCores":6,"ramGB":15.3,"os":"win32 10.0.26200","node":"v22.16.0","docker":"Docker version 29.8.1, build 4a63305","receiver":"in-container chaos receiver on localhost (NOT a real network)","experiment":"receiver-transient-failures-auto-recover","note":"receiver fails 2x then succeeds (2 < breaker threshold 5), so retries alone recover it with no intervention"}
+[2026-10-15T18:41:01.748Z] published 0f3c9c65-fbb5-431b-a65f-277b4a19a107; receiver will fail attempts 1-2 then return 200
+[2026-10-15T18:41:03.808Z] delivered after 2060ms via automatic retries (no operator action)
